@@ -17,14 +17,16 @@ class PushManager {
     }
 
     this._initPromise = new Promise(async (resolve, reject) => {
-      if (!this._isSupported()) {
-        console.log("PushManager: Not supported");
-        this._isInitialized = true;
-        resolve(false);
-        return;
-      }
-
       try {
+        // ✅ CEK SUPPORT
+        if (!this._isSupported()) {
+          console.log("PushManager: Not supported");
+          this._isInitialized = true;
+          resolve(false);
+          return;
+        }
+
+        // ✅ DEVELOPMENT MODE - skip service worker
         if (this._isDevelopment()) {
           console.log("PushManager: Development mode - using localStorage");
           const stored = localStorage.getItem("pushSubscription");
@@ -34,28 +36,39 @@ class PushManager {
           return;
         }
 
-        console.log("PushManager: Service Worker ready");
+        // ✅ PRODUCTION - tunggu service worker
+        console.log("PushManager: Waiting for Service Worker...");
 
+        // Tunggu service worker ready
+        this.registration = await navigator.serviceWorker.ready;
+
+        if (!this.registration?.pushManager) {
+          console.log("PushManager: PushManager not available");
+          this._isInitialized = true;
+          resolve(false);
+          return;
+        }
+
+        // ✅ AMAN: Akses pushManager
         this.subscription =
           await this.registration.pushManager.getSubscription();
         this.isSubscribed = !!this.subscription;
 
         this._isInitialized = true;
-        console.log("PushManager: Initialized, subscribed:", this.isSubscribed);
+        console.log(
+          "PushManager: Initialized successfully, subscribed:",
+          this.isSubscribed
+        );
         resolve(true);
       } catch (error) {
-        console.error("PushManager: Init error:", error);
+        console.error("PushManager: Init failed:", error);
 
-        if (this._isDevelopment()) {
-          console.log("PushManager: Development fallback to localStorage");
-          const stored = localStorage.getItem("pushSubscription");
-          this.isSubscribed = !!stored;
-          this._isInitialized = true;
-          resolve(true);
-        } else {
-          this._isInitialized = true;
-          resolve(false);
-        }
+        // Fallback ke development mode
+        console.log("PushManager: Falling back to localStorage");
+        const stored = localStorage.getItem("pushSubscription");
+        this.isSubscribed = !!stored;
+        this._isInitialized = true;
+        resolve(true);
       }
     });
 
@@ -71,7 +84,8 @@ class PushManager {
   _isDevelopment() {
     return (
       window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1"
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname.includes("github.io") // ✅ GitHub Pages juga dianggap development
     );
   }
 
