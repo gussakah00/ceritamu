@@ -1,29 +1,41 @@
-const CACHE_NAME = "cerita-sekitarmu-v2.2.0";
-const APP_SHELL_CACHE = "app-shell-v2";
+const CACHE_NAME = "cerita-sekitarmu-v3.0.0";
+const APP_SHELL_CACHE = "app-shell-v3";
+
+// ✅ FIX: Gunakan absolute path untuk GitHub Pages
+const BASE_PATH = "/ceritamu";
 
 const ESSENTIAL_FILES = [
-  "./ceritamu",
-  "./index.html",
-  "./main.bundle.js",
-  "./styles.css",
-  "./manifest.json",
+  `${BASE_PATH}/`,
+  `${BASE_PATH}/index.html`,
+  `${BASE_PATH}/main.bundle.js`,
+  `${BASE_PATH}/styles.css`,
+  `${BASE_PATH}/manifest.json`,
+  // ✅ TAMBAH: Cache semua chunk files
+  `${BASE_PATH}/283.main.bundle.js`,
+  `${BASE_PATH}/327.main.bundle.js`,
+  `${BASE_PATH}/395.main.bundle.js`,
+  `${BASE_PATH}/408.main.bundle.js`,
+  `${BASE_PATH}/451.main.bundle.js`,
+  `${BASE_PATH}/611.main.bundle.js`,
+  `${BASE_PATH}/724.main.bundle.js`,
 ];
 
 const OPTIONAL_FILES = [
-  "./favicon.png",
-  "./icons/icon-72x72.png",
-  "./icons/icon-96x96.png",
-  "./icons/icon-128x128.png",
-  "./icons/icon-144x144.png",
-  "./icons/icon-152x152.png",
-  "./icons/icon-192x192.png",
-  "./icons/icon-384x384.png",
-  "./icons/icon-512x512.png",
+  `${BASE_PATH}/favicon.png`,
+  `${BASE_PATH}/icons/icon-72x72.png`,
+  `${BASE_PATH}/icons/icon-96x96.png`,
+  `${BASE_PATH}/icons/icon-128x128.png`,
+  `${BASE_PATH}/icons/icon-144x144.png`,
+  `${BASE_PATH}/icons/icon-152x152.png`,
+  `${BASE_PATH}/icons/icon-192x192.png`,
+  `${BASE_PATH}/icons/icon-384x384.png`,
+  `${BASE_PATH}/icons/icon-512x512.png`,
 ];
 
 // === INSTALL ===
 self.addEventListener("install", (event) => {
   console.log("🔧 Service Worker: Memulai instalasi...");
+  console.log("📍 Base Path:", BASE_PATH);
 
   // Skip waiting - langsung aktifkan SW baru
   event.waitUntil(self.skipWaiting());
@@ -41,7 +53,7 @@ self.addEventListener("install", (event) => {
           ESSENTIAL_FILES.map((url) =>
             cache.add(url).catch((err) => {
               console.warn(`⚠️ Gagal cache essential ${url}:`, err.message);
-              return null; // Return null instead of throwing
+              return null;
             })
           )
         );
@@ -81,7 +93,6 @@ self.addEventListener("install", (event) => {
         console.log("🎉 Proses caching selesai");
       } catch (error) {
         console.error("❌ Error utama saat caching:", error);
-        // JANGAN reject - biarkan SW tetap install meski caching gagal
       }
     })()
   );
@@ -135,54 +146,83 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Handle request
-  event.respondWith(
-    (async () => {
-      try {
-        // Coba cache dulu
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+  // ✅ FIX: Handle chunk files specifically
+  if (
+    url.pathname.includes(".bundle.js") ||
+    url.pathname.includes(".chunk.js")
+  ) {
+    event.respondWith(handleChunkRequest(request));
+    return;
+  }
 
-        // Kalau tidak ada di cache, fetch dari network
-        const networkResponse = await fetch(request);
-
-        // Cache response yang valid (kecuali API calls)
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          !url.href.includes("story-api.dicoding.dev")
-        ) {
-          try {
-            const cache = await caches.open(APP_SHELL_CACHE);
-            await cache.put(request, networkResponse.clone());
-          } catch (cacheError) {
-            console.warn(`⚠️ Gagal menyimpan ke cache: ${url.pathname}`);
-          }
-        }
-
-        return networkResponse;
-      } catch (error) {
-        console.log(`❌ Network error: ${url.pathname}`);
-
-        // Fallback untuk HTML requests
-        if (
-          request.destination === "document" ||
-          request.headers.get("accept")?.includes("text/html")
-        ) {
-          const fallback = await caches.match("./index.html");
-          if (fallback) {
-            return fallback;
-          }
-        }
-
-        // Return offline page
-        return createOfflineResponse();
-      }
-    })()
-  );
+  // Handle normal requests
+  event.respondWith(handleNormalRequest(request));
 });
+
+// Handle chunk files dengan strategy cache-first
+async function handleChunkRequest(request) {
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    console.log(
+      `📂 Serving chunk from cache: ${new URL(request.url).pathname}`
+    );
+    return cachedResponse;
+  }
+
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.status === 200) {
+      const cache = await caches.open(APP_SHELL_CACHE);
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (error) {
+    console.error(`❌ Chunk load failed: ${new URL(request.url).pathname}`);
+    // Return error response untuk chunks
+    return new Response("Chunk load failed", {
+      status: 404,
+      statusText: "Chunk Not Found",
+    });
+  }
+}
+
+// Handle normal requests dengan strategy network-first
+async function handleNormalRequest(request) {
+  try {
+    // Coba network dulu
+    const networkResponse = await fetch(request);
+
+    // Cache response yang valid
+    if (networkResponse.status === 200) {
+      const cache = await caches.open(APP_SHELL_CACHE);
+      cache.put(request, networkResponse.clone());
+    }
+
+    return networkResponse;
+  } catch (error) {
+    console.log(`❌ Network error: ${new URL(request.url).pathname}`);
+
+    // Fallback ke cache
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    // Fallback untuk HTML requests
+    if (
+      request.destination === "document" ||
+      request.headers.get("accept")?.includes("text/html")
+    ) {
+      const fallback = await caches.match(`${BASE_PATH}/index.html`);
+      if (fallback) {
+        return fallback;
+      }
+    }
+
+    // Return offline page
+    return createOfflineResponse();
+  }
+}
 
 // Helper function untuk create offline response
 function createOfflineResponse() {
@@ -198,6 +238,7 @@ function createOfflineResponse() {
             text-align: center; 
             padding: 50px; 
             background: #f5f5f5;
+            margin: 0;
           }
           .container { 
             background: white; 
@@ -205,9 +246,23 @@ function createOfflineResponse() {
             border-radius: 10px; 
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             max-width: 500px;
-            margin: 0 auto;
+            margin: 100px auto;
           }
-          h1 { color: #666; }
+          h1 { color: #666; margin-bottom: 20px; }
+          p { color: #888; line-height: 1.6; }
+          button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+          }
+          button:hover {
+            background: #0056b3;
+          }
         </style>
       </head>
       <body>
@@ -215,6 +270,7 @@ function createOfflineResponse() {
           <h1>📶 Anda Sedang Offline</h1>
           <p>Aplikasi membutuhkan koneksi internet untuk mengambil data cerita terbaru.</p>
           <p>Silakan periksa koneksi internet Anda dan coba lagi.</p>
+          <button onclick="window.location.reload()">Coba Lagi</button>
         </div>
       </body>
     </html>
@@ -236,8 +292,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: "Ada cerita baru di sekitarmu! 📖",
-    icon: "./icons/icon-192x192.png",
-    badge: "./icons/icon-72x72.png",
+    icon: `${BASE_PATH}/icons/icon-192x192.png`,
+    badge: `${BASE_PATH}/icons/icon-72x72.png`,
     tag: "cerita-notification",
   };
 
@@ -257,9 +313,10 @@ self.addEventListener("notificationclick", (event) => {
           return client.focus();
         }
       }
-      return self.clients.openWindow("./");
+      return self.clients.openWindow(`${BASE_PATH}/`);
     })
   );
 });
 
-console.log("🚀 Service Worker loaded dan siap! Versi 2.2.0");
+console.log("🚀 Service Worker loaded dan siap! Versi 3.0.0");
+console.log("📍 Base Path:", BASE_PATH);
