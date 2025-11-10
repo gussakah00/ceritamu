@@ -2,7 +2,7 @@
   "name": "cerita-di-sekitarmu",
   "version": "1.0.0",
   "description": "Aplikasi berbagi cerita berbasis lokasi",
-  "homepage": "https://gussakah00.github.io/notes-app",
+  "homepage": "https://gussakah00.github.io/ceritamu",
   "scripts": {
     "build": "webpack --config webpack.prod.js",
     "build-dev": "webpack --config webpack.dev.js",

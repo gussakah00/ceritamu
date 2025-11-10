@@ -2,7 +2,7 @@ const CACHE_NAME = "cerita-sekitarmu-v2.2.0";
 const APP_SHELL_CACHE = "app-shell-v2";
 
 const ESSENTIAL_FILES = [
-  "/ceritamu",
+  "./ceritamu",
   "./index.html",
   "./main.bundle.js",
   "./styles.css",

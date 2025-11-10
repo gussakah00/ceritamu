@@ -1,2 +1,2 @@
-APP_URL= https://gussakah00.github.io/notes-app/
+APP_URL= https://gussakah00.github.io/ceritamu/
 MAP_SERVICE_API_KEY=<api_key>
